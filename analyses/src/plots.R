@@ -161,3 +161,9 @@ ggsave(filename = here::here("analyses/figures/biplot_pca_e2.png"), plot = gg_re
 
 gg_res_pca_both <- make_pca_biplot(res_pca_ques)
 ggsave(filename = here::here("analyses/figures/biplot_pca_both.png"), plot = gg_res_pca_both, width = 6, height = 4)
+
+
+# intrusion ratings for R/NR No-Think items -------------------------------
+
+gg_intr_rnr <- make_plot_intr_supp(df_intr_woex_e1, df_intr_woex_e2)
+ggsave(here::here("analyses/figures/plot_intrusion_supp.png"), plot = gg_intr_rnr, width = 6, height = 4)

@@ -46,7 +46,7 @@ load_data <- function(phase, expID, rm_subj = NULL, col_names = T, rm_col = NULL
 calc_score <- function(df, quesName){
   df %>% 
     dplyr::group_by(subjID) %>% 
-    dplyr::summarise(score = sum(value)) %>% # meanは合成得点を算出するため。最終的に標準化するので問題なし
+    dplyr::summarise(score = sum(value), .groups = "drop") %>% # meanは合成得点を算出するため。最終的に標準化するので問題なし
     dplyr::mutate(ques = quesName)
 }
 
@@ -104,31 +104,19 @@ format_pval_2 <- function(pval) {
   })
 }
 
-# function to calculate effect size from paired t test
-# retrieved from https://tjo.hatenablog.com/entry/2014/02/24/192655
-calc_g_ci <- function(x, y){
-  n_x <- length(x)- 1
-  n_y <- length(y)- 1
-  mean_diff  <- mean(x) - mean(y) # 平均値の差
-  csd <- n_x * var(x) + n_y * var(y)
-  csd <- csd/(n_x + n_y)
-  csd <- sqrt(csd)  # Common error varianceはこれで出せる
-  cd  <- mean_diff/csd  # これでCohen’s dが求まる
-  return(MBESS::ci.smd(smd = cd, n.1 = n_x + 1, n.2 = n_y + 1))
-}
-
 get_t_g_ci <- function(x, y, method = c("two.sided", "less", "greater")) {
   res <- t.test(x, y, paired = T, alternative = method)
   t <- res$statistic
   dof <- res$parameter
   p_value <- res$p.value
-  g_ci <- calc_g_ci(x, y)
-  g <- g_ci$smd
-  ci_lower <- g_ci$Lower.Conf.Limit
-  ci_upper <- g_ci$Upper.Conf.Limit
+  dz_ci <- MBESS::ci.sm(ncp = t, N = dof + 1)
+  dz <- dz_ci$Standardized.Mean
+  ci_lower <- dz_ci$Lower.Conf.Limit.Standardized.Mean # g_ci$Lower.Conf.Limit
+  ci_upper <- dz_ci$Upper.Conf.Limit.Standardized.Mean# g_ci$Upper.Conf.Limit
   
-  sprintf("_t_(%d) = %.2f, %s, _d_ = %.2f, 95%% CI [%.2f, %.2f]",
-          dof, t, format_pval(p_value), g, ci_lower, ci_upper)
+  
+  sprintf("_t_(%d) = %.2f, %s, _dz_ = %.2f, 95%% CI [%.2f, %.2f]",
+          dof, t, format_pval(p_value), dz, ci_lower, ci_upper)
 }
 
 
@@ -243,8 +231,6 @@ lm_to_table <- function(lm_obj) {
   return(l_tab_like_df)
 }
 
-# import exp1 data --------------------------------------------------------
-
 load_data_e1 <- function(phase, col_names = T, rm_col = T) {
   if (rm_col) {
     rm_col_e1 <- c("tar", "valence", "gender", "age")
@@ -258,28 +244,6 @@ load_data_e1 <- function(phase, col_names = T, rm_col = T) {
     rm_col = rm_col_e1
   )
 }
-
-df_encoding_e1 <- load_data_e1('encoding', rm_col = F)
-df_cycles_e1 <- load_data_e1('cycles', c("subjID","gender","age","phase","cycleN","order","itemID","TNTcond","valence","cue","tar","correct"))
-df_TNT_e1 <- load_data_e1('TNT', c("subjID","gender","age","phase","block","order","itemID","TNTcond","valence","cue","tar","intrusion","RT"))
-df_TNT_e1 <-  df_TNT_e1 %>% dplyr::filter(block != 'prac') %>% dplyr::mutate(block = as.integer(block) + 1)
-
-df_recog_e1 <- load_data_e1('(pre|post)-recog', c("subjID","gender","age","phase","order","itemID","TNTcond","valence","tar","correct","RT"))
-df_recog_e1 <- tidyr::separate(df_recog_e1, col = phase, into = c('time', 'task'))
-
-df_rating_e1 <- load_data_e1('(pre|post)-rating', c("subjID","gender","age","phase","order","itemID","TNTcond","valence","cue","tar","val","aro"))
-df_rating_e1 <- df_rating_e1 %>% tidyr::separate(col = phase, into = c('time', 'task'))
-
-df_rrs_e1 <- load_data_e1('rrs', rm_col = F) %>% dplyr::filter(cond == 'b') %>% calc_score("rrs")
-df_stais_e1 <- load_data_e1('stai1', rm_col = F) %>% rev_value() %>% calc_score("stais")
-df_stait_e1 <- load_data_e1('stai2', rm_col = F) %>% rev_value() %>% calc_score("stait")
-df_bdi_e1 <- load_data_e1('bdi', rm_col = F) %>% calc_score("bdi")
-
-df_ques_e1 <- 
-  dplyr::bind_rows(df_rrs_e1, df_stais_e1, df_stait_e1, df_bdi_e1) %>% 
-  tidyr::spread(key = ques, value = score)
-
-# import exp2 data -------------------------------------------------------------
 
 load_data_e2 <- function(phase, rm_col = T) {
   if (rm_col) {
@@ -295,35 +259,120 @@ load_data_e2 <- function(phase, rm_col = T) {
   )
 }
 
-df_encoding_e2 <- load_data_e2("encoding", rm_col = F)
-df_cycles_e2 <- load_data_e2("cycles")
-df_TNT_e2 <- load_data_e2("TNT") %>% dplyr::filter(block > 0)
 
-df_recog_e2 <-
-  map2(
-    .x = c('pre-recog', 'post-recog'), 
-    .y = c('pre', 'post'), 
-    .f = ~ load_data_e2(.x) %>% dplyr::mutate(time = .y)
-  ) %>% 
-  dplyr::bind_rows() %>% 
-  dplyr::mutate(TNTcond = if_else(str_detect(TNTcond, "new"), "new", TNTcond)) %>% 
-  dplyr::mutate_if(is_character, as_factor)
+# plot functions ----------------------------------------------------------
 
-df_rating_e2 <-
-  map2(
-    .x = c('pre-rating', 'post-rating'), 
-    .y = c('pre', 'post'), 
-    .f = ~ load_data_e2(.x) %>% dplyr::mutate(time = .y)
-  ) %>% 
-  dplyr::bind_rows() %>% 
-  dplyr::mutate_if(is_character, as_factor)
+font_size <- 12
 
-# Questionnaires
-df_rrs_e2 <- load_data_e2("rrs", rm_col = F) %>% dplyr::filter(cond == 'b') %>% calc_score("rrs")
-df_stais_e2 <- load_data_e2("staiS", rm_col = F) %>% rev_value() %>% calc_score("stais")
-df_stait_e2 <- load_data_e2("staiT", rm_col = F) %>% rev_value() %>% calc_score("stait")
-df_bdi_e2 <- load_data_e2("bdi", rm_col = F) %>% calc_score("bdi")
+make_plot_intr <- function(df_intr) {
+  df_intr %>% 
+    dplyr::mutate(TNTcond = forcats::fct_relevel(TNTcond, "t","nt")) %>% 
+    ggplot2::ggplot()+
+    aes(x=block, y=int_rate, group=TNTcond) +
+    stat_summary(geom = "line", fun.y = "mean", aes(linetype = TNTcond)) +
+    stat_summary(geom = "errorbar", fun.data = "mean_se", width=0.3, color="black") +
+    stat_summary(geom = "point", fun.y = "mean", size=3, mapping = aes(shape = TNTcond)) +
+    scale_shape_manual(values = c("nt"=16, "t"=17), labels = c("nt"="No-Think", "t"="Think"), name="TNT status") +
+    scale_linetype_manual(values = c("nt"="dashed", "t"="solid"), labels = c("nt"="No-Think", "t"="Think"), name="TNT status") +
+    scale_x_continuous(breaks=seq(1,10,by=1)) +
+    scale_y_continuous(breaks=seq(0,1,by=0.1), limits=c(0,1)) +
+    labs(x="Block", y="Intrusion Proportion") +
+    theme_bw(base_size = font_size, base_family = "Helvetica Neue") +
+    theme(panel.grid = element_blank(),
+          axis.text = element_text(color = "black"),
+          legend.title = element_blank(),
+          legend.background = element_blank())
+}
 
-df_ques_e2 <- 
-  dplyr::bind_rows(df_rrs_e2, df_stais_e2, df_stait_e2, df_bdi_e2) %>% 
-  tidyr::spread(key = ques, value = score)
+make_plot_intr_supp <- function(df_intr_woex_1, df_intr_woex_2) {
+  list(`Experiment 1` = df_intr_woex_1, `Experiment 2` = df_intr_woex_2) %>% 
+    dplyr::bind_rows(.id = "expt") %>% 
+    dplyr::filter(TNTcond == 'nt') %>% 
+    dplyr::mutate(block = as.factor(block),
+                  correct = factor(as.character(correct), levels = c('1', '0'), labels = c("Recognized", "Non-Recognized"))) %>% 
+    dplyr::group_by(subjID, block, TNTcond, correct, expt) %>% 
+    dplyr::summarise(int_rate = mean(inORnot), .groups = "drop") %>% 
+    ggplot(aes(x = block, y = int_rate, group = correct)) +
+    stat_summary(geom = "line", fun.y = "mean", aes(linetype = correct)) +
+    stat_summary(geom = "errorbar", fun.data = "mean_se", width = 0.3) +
+    stat_summary(geom = "point", fun.y = "mean", size = 3, aes(shape = correct)) +
+    scale_shape_manual(values = c("Recognized" = 16, "Non-Recognized" = 4)) +
+    labs(x="Block", y="Intrusion Proportion") +
+    theme_bw(base_size = font_size, base_family = "Helvetica Neue") +
+    theme(panel.grid = element_blank(),
+          axis.text = element_text(color = "black"),
+          legend.title = element_blank(),
+          legend.background = element_blank(),
+          legend.position = c(0.7, 0.2)) +
+    facet_grid(cols = vars(expt))
+}
+
+make_plot_hitrate <- function(df_hitrate) {
+  df_hitrate %>% 
+    dplyr::ungroup() %>% 
+    dplyr::mutate(TNTcond = if_else(TNTcond == "b", "Baseline", "No-Think")) %>% 
+    ggplot2::ggplot() +
+    aes(x = TNTcond, y = hit_rate) +
+    stat_summary(geom = "errorbar", fun.data = 'mean_se', position = position_dodge(width = 0.9), 
+                 show.legend = F, width = 0.07) +
+    stat_summary(geom = "point", fun = "mean", position = position_dodge(width = 0.9), 
+                 show.legend = F, fill = "grey95", color = "black", shape = 16, size = 3) +
+    geom_jitter(width = 0.2, color = "black", alpha = 0.3, height = 0, size = 2) +
+    labs(y = "Hit rate") +
+    theme_bw(base_size = font_size, base_family = "Helvetica Neue") +
+    theme(axis.text = element_text(color = "black"),
+          axis.title.x = element_blank(),
+          panel.grid = element_blank(),
+          legend.position = "none")
+}
+
+make_plot_rating <- function(df_rating) {
+  df_rating %>% 
+    dplyr::mutate(TNTcond = if_else(TNTcond == 'b', 'Baseline', 'No-Think')) %>% 
+    ggplot2::ggplot(aes(x = TNTcond, y = diff)) +
+    geom_hline(yintercept = 0, linetype = 'longdash') +
+    stat_summary(geom = "errorbar", fun.data = 'mean_se', position = position_dodge(width = 0.9), 
+                 show.legend = F, width = 0.07)+
+    stat_summary(geom = "point", fun = "mean", position = position_dodge(width = 0.9), 
+                 show.legend = F, fill = "grey95", color = "black", shape = 16, size = 3) +
+    geom_jitter(width = 0.2, color = "black", alpha = 0.3, height = 0, size = 2) +
+    theme_bw(base_size = font_size, base_family = 'Helvetica Neue') +
+    theme(
+      axis.text = element_text(color = 'black'),
+      axis.title.x = element_blank(),
+      panel.grid = element_blank(),
+      legend.title = element_blank(),
+      legend.background = element_blank()
+    )
+}
+
+make_pca_biplot <- function(pca_obj) {
+  ggbiplot(
+    pca_obj,
+    scale = 1,
+    ellipse = TRUE, 
+    circle = F,
+    alpha = 0.5
+  )  +
+    coord_cartesian(xlim = c(-2, 2)) +
+    theme_bw(base_size = font_size, base_family = "Helvetica Neue") +
+    theme(panel.grid = element_blank(),
+          axis.text = element_text(color = "black"),
+          plot.margin = margin(t = 10, b = 10, r = 10, l = 10))
+}
+
+make_pairplot <- function(df_indiv_ques) {
+  df_indiv_ques %>% 
+    dplyr::select(BDI = bdi, 
+                  RRS = rrs, 
+                  `STAI-S` = stais, 
+                  `STAI-T` = stait, 
+                  Valence = val,
+                  Arosal = aro) %>%
+    GGally::ggpairs(lower = list(continuous = wrap("smooth", alpha = 0.3)),
+                    upper = list(continuous = wrap("cor", color = "black"))) +
+    theme_bw(base_size = font_size, base_family = "Helvetica Neue") +
+    theme(axis.text = element_text(colour = "black"),
+          panel.grid = element_blank(),
+          strip.background = element_blank())
+}

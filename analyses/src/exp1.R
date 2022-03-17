@@ -5,6 +5,19 @@ if (!exists('load_data_e1')){
   source(here::here('analyses/src/setup.R'))
 }
 
+load_data_e1 <- function(phase, col_names = T, rm_col = T) {
+  if (rm_col) {
+    rm_col_e1 <- c("tar", "valence", "gender", "age")
+  } else {
+    rm_col_e1 <- NULL
+  }
+  load_data(
+    phase, 
+    expID = "inzemi-2018", 
+    col_names = col_names,
+    rm_col = rm_col_e1
+  )
+}
 
 # excluded ----------------------------------------------------------------
 
@@ -221,39 +234,17 @@ smry_pca_e1 <- summary(res_pca_e1)
 df_indiv_ques_all_e1 <- df_indiv_ques_e1 %>%
   dplyr::mutate(pc1 = res_pca_e1$x[,1], pc2 = res_pca_e1$x[,2])
 
-df_lmfit_e1 <- df_indiv_ques_all_e1 %>% 
-  tidyr::pivot_longer(cols = val:aro, names_to = 'vars', values_to = "value") %>% 
-  dplyr::group_by(vars) %>%
-  tidyr::nest() %>% 
-  dplyr::mutate(step1 = purrr::map(.x = data, 
-                                   .f = ~ lm(formula = value ~ pc1 + pc2, data = .x)),
-                step2 = purrr::map(.x = data, 
-                                   .f = ~ lm(formula = value ~ pc1 + pc2 + pc1:pc2,
-                                             data = .x)),
-                model_comparison = purrr::pmap(.l = list(step1, step2),
-                                               .f = anova)
-                )
+# valence
+lmfit_val_e1 <- lm(val ~ pc1 + pc2, data = df_indiv_ques_all_e1)
+smry_lmfit_val_e1 <- summary(lmfit_val_e1)
+r2_lmfit_val_e1 <- get_reg_stats(lmfit_val_e1)
+cff_pc1_val_e1 <- get_cff_stats(lmfit_val_e1, "pc1")
 
-## valence
-r2_val_step1_e1 <- get_reg_stats(df_lmfit_e1$step1[[1]])
-r2_val_step2_e1 <- get_reg_stats(df_lmfit_e1$step2[[1]])
-model_comp_val_e1 <- get_aov_stats(df_lmfit_e1$model_comparison[[1]], 2)
-
-cff_pc1_step1_val_e1 <- get_cff_stats(df_lmfit_e1$step1[[1]], "pc1")
-
-## arousal
-r2_aro_step1_e1 <- get_reg_stats(df_lmfit_e1$step1[[2]])
-r2_aro_step2_e1 <- get_reg_stats(df_lmfit_e1$step2[[2]])
-model_comp_aro_e1 <- get_aov_stats(df_lmfit_e1$model_comparison[[2]], 2)
-
-cff_pc1_step1_aro_e1 <- get_cff_stats(df_lmfit_e1$step1[[2]], "pc1")
-
-# simple slope analysis
-res_simp_slope_e1 <- pequod::lmres(aro ~ pc1 * pc2, data = df_indiv_ques_all_e1) %>% 
-  pequod::simpleSlope(pred = "pc1", mod1 = "pc2")
-
-cff_pc1Lowpc2_step2_aro <- get_ssa_stats(res_simp_slope_e1, 1)
-cff_pc1Highpc2_step2_aro <- get_ssa_stats(res_simp_slope_e1, 2)
+# arousal
+lmfit_aro_e1 <- lm(aro ~ pc1 + pc2, data = df_indiv_ques_all_e1)
+smry_lmfit_aro_e1 <- summary(lmfit_aro_e1)
+r2_lmfit_aro_e1 <- get_reg_stats(lmfit_aro_e1)
+cff_pc1_aro_e1 <- get_cff_stats(lmfit_aro_e1, "pc1")
 
 # for analyses on JASP
 df_jasp_e1 <- l_df_rating_subj_mean_e1 %>% 
@@ -293,36 +284,13 @@ df_rating_tntb_e1 %>%
   dplyr::select(time, stat, val_b, val_nt, val_t, aro_b, aro_nt, aro_t) %>%
   knitr::kable(format = "pandoc")
 
-l_smry_lm_step1_e1 <- lm_to_table(df_lmfit_e1$step1)
-l_smry_lm_step2_e1 <- lm_to_table(df_lmfit_e1$step2)
 
-purrr::map2(l_smry_lm_step1_e1, l_smry_lm_step2_e1, .f = right_join, by = c("term"))  %>%
-  purrr::map2(.y = c("val", "aro"), .f = ~mutate(.x, measure = .y)) %>%
-  dplyr::bind_rows() %>%
+# regression
+dplyr::bind_rows(
+  list(val = lm_to_table(lmfit_val_e1), aro = lm_to_table(lmfit_aro_e1)), 
+  .id = "measure") %>% 
   knitr::kable(format = "pandoc")
 
-# model comparison
-l_model_stats_step1_e1 <- purrr::map(df_lmfit_e1$step1, .f = summary) %>%
-  purrr::map(.f = ~ tibble(step = 1, r_adj = .x$adj.r.squared, p = 1 - pf(.x$fstatistic["value"], .x$fstatistic["numdf"], .x$fstatistic["dendf"])))
-
-l_model_stats_step2_e1 <- purrr::map(df_lmfit_e1$step2, .f = summary) %>%
-  purrr::map(.f = ~ tibble(step = 2, r_adj = .x$adj.r.squared, p = 1 - pf(.x$fstatistic["value"], .x$fstatistic["numdf"], .x$fstatistic["dendf"])))
-
-purrr::pmap(list(l_model_stats_step1_e1, l_model_stats_step2_e1), .f = bind_rows) %>%
-  purrr::map(.f = mutate, diff = r_adj - lag(r_adj)) %>%
-  purrr::map2(.y = df_lmfit_e1$model_comparison,
-              .f = ~mutate(.x, p_diff = .y$`Pr(>F)`)
-  ) %>%
-  purrr::map(tidyr::pivot_longer, cols = -step) %>%
-  purrr::map(mutate,
-             type = if_else(str_detect(name, "p"), "p", "r"),
-             type2 = if_else(str_detect(name, "diff"), "diff", "adj")) %>%
-  purrr::map(select, step, type, type2, value) %>%
-  purrr::map(tidyr::pivot_wider, names_from = c(type, step), values_from = value) %>%
-  purrr::map(mutate_at, .vars = c("p_1", "p_2"), .funs = format_pval_2) %>%
-  dplyr::bind_rows(.id = "measure") %>% 
-  dplyr::mutate(measure = dplyr::recode(measure, "1" = "val", "2" = "aro")) %>%
-  knitr::kable(format = "pandoc", digits = 2)
 
 # plots -------------------------------------------------------------------
 
@@ -361,3 +329,27 @@ plot_all_e1 <- cowplot::plot_grid(upper_grid, ggmatrix_gtable(gg_pairplot_e1), n
 
 gg_res_pca_e1 <- make_pca_biplot(res_pca_e1)
 # ggsave(filename = here::here("analyses/figures/biplot_pca_e1.png"), plot = gg_res_pca_e1, width = 6, height = 4)
+
+gg_corr_intr_recog_e1 <- df_ques_e1 %>% 
+  dplyr::left_join(df_hit_rate_e1_w %>% dplyr::mutate(`Item Recog` = b - nt, .keep = "unused"),
+                   by = "subjID") %>% 
+  dplyr::left_join(df_intr_TNT_e1 %>%
+                     dplyr::filter(TNTcond == 'nt') %>%
+                     dplyr::group_by(subjID) %>%
+                     dplyr::summarise(mean_int = mean(int_rate)),
+                   by = "subjID") %>%
+  dplyr::select(BDI = bdi, 
+                RRS = rrs, 
+                `STAI-S` = stais, 
+                `STAI-T` = stait, 
+                `Intrusion` = mean_int,
+                `Item Recog`) %>% 
+  GGally::ggpairs(lower = list(continuous = wrap("smooth", alpha = 0.3)),
+                  upper = list(continuous = wrap("cor", color = "black"))) +
+  theme_bw(base_size = font_size, base_family = "Helvetica Neue") +
+  theme(axis.text = element_text(colour = "black"),
+        panel.grid = element_blank(),
+        strip.background = element_blank())
+
+# ggsave(filename = here::here("analyses/figures/pairs_plot_e1_supple.png"),
+#        plot = gg_corr_intr_recog_e1, width = 8, height = 8)

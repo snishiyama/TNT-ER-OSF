@@ -94,6 +94,9 @@ format_pval_2 <- function(pval) {
     if (x < .001) {
       pval_new <- "< .001"
     }
+    else if (x > .999) {
+      pval_new <- "> .999"
+    }
     else {
       pval_new <- x %>% 
         round(3) %>% 
@@ -213,52 +216,39 @@ get_ssa_stats <- function(simple_slope_obj, rownum){
 }
 
 lm_to_table <- function(lm_obj) {
-  l_ivs <- purrr::map(lm_obj, .f = ~ .x$coefficients %>% names())
-  l_lm_Beta <- 
-    lm_obj %>% 
-    purrr::map(.f = lm.Beta) %>%
-    purrr::map2(.y = l_ivs, 
-                .f = ~ tibble(term = tail(.y, length(.y) - 1), beta = .x))
-
-  l_tab_like_df <-
-    lm_obj %>%
-    purrr::map(.f = broom::tidy) %>%
-    purrr::map(.f = mutate, ci = sprintf("[%.2f,%.2f]", estimate - 1.96 * std.error, estimate + 1.96 * std.error)) %>%
-    purrr::map2(.y = l_lm_Beta, .f = ~left_join(x = .x, y = .y, by = c("term"))) %>%
-    purrr::map(.f = select, term, estimate, ci, beta, p.value) %>%
-    purrr::map(.f = mutate_at, .vars = c("estimate", "beta"), .funs = round, digits = 2) %>%
-    purrr::map(.f = mutate_at, .vars = "p.value", .funs = format_pval_2)
-  return(l_tab_like_df)
+  beta <- lm.Beta(lm_obj)
+  df_beta <- data.frame(beta = beta, term = names(beta))
+  
+  lm_obj %>% 
+    broom::tidy() %>% 
+    dplyr::left_join(df_beta, by = "term") %>% 
+    dplyr::mutate(
+      p.adj = p.adjust(p.value, "holm"),
+      ci = sprintf("[%.2f,%.2f]", estimate - 1.96 * std.error, estimate + 1.96 * std.error)
+    ) %>% 
+    dplyr::select(term, estimate, ci, beta, p.value, p.adj) %>% 
+    dplyr::mutate(
+      across(.cols = c(estimate, beta), .fns = round, digits = 2),
+      across(.cols = c(p.value, p.adj), .fns = format_pval_2)
+    ) 
 }
 
-load_data_e1 <- function(phase, col_names = T, rm_col = T) {
-  if (rm_col) {
-    rm_col_e1 <- c("tar", "valence", "gender", "age")
-  } else {
-    rm_col_e1 <- NULL
+
+loocv <- function(d, ff, dv) {
+  N <- nrow(d)
+  if (N < 1) return(NA)
+  rids <- 1:N
+  sum_mse <- 0
+  for (i in rids) {
+    selected <- d[rids[rids != i],]
+    fit <- lm(ff, data = selected)
+    y_hat <- predict(fit, d[i,])
+    mse <-  (d[[i, dv]] - y_hat)^2
+    sum_mse <- sum_mse + mse
+    # print(sprintf("mse: %.4f; sum_mse: %.4f", mse, sum_mse))
   }
-  load_data(
-    phase, 
-    expID = "inzemi-2018", 
-    col_names = col_names,
-    rm_col = rm_col_e1
-  )
+  return(sum_mse / N)
 }
-
-load_data_e2 <- function(phase, rm_col = T) {
-  if (rm_col) {
-    rm_col_e2 <- c("IAPS", "cue", "valence", "gender", "age", 'CB')
-  } else {
-    rm_col_e2 <- NULL
-  }
-  load_data(
-    phase, 
-    expID = "inzemi-2",
-    rm_subj = c(3,5,7,11,13,16,18,204,29,30,32,33,38,41,42),
-    rm_col = rm_col_e2
-  )
-}
-
 
 # plot functions ----------------------------------------------------------
 
@@ -376,3 +366,4 @@ make_pairplot <- function(df_indiv_ques) {
           panel.grid = element_blank(),
           strip.background = element_blank())
 }
+

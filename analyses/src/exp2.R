@@ -5,6 +5,20 @@ if (!exists('load_data_e2')){
   source(here::here('analyses/src/setup.R'))
 }
 
+load_data_e2 <- function(phase, rm_col = T) {
+  if (rm_col) {
+    rm_col_e2 <- c("IAPS", "cue", "valence", "gender", "age", 'CB')
+  } else {
+    rm_col_e2 <- NULL
+  }
+  load_data(
+    phase, 
+    expID = "inzemi-2",
+    rm_subj = c(3,5,7,11,13,16,18,204,29,30,32,33,38,41,42),
+    rm_col = rm_col_e2
+  )
+}
+
 
 # loading data ------------------------------------------------------------
 
@@ -87,12 +101,12 @@ ttest_intr_TNT_e2 <- t.test(df_intr_e2_w$block1, df_intr_e2_w$block10, alternati
 
 smry_intr_e2 <- get_t_g_ci(df_intr_e2_w$block1, df_intr_e2_w$block10, method = 'greater')
 
-df_intr_TNT_e2 %>% 
-  dplyr::filter(TNTcond == 'nt') %>% 
-  dplyr::group_by(block, correct) %>% 
-  dplyr::summarise(intr = mean(int_rate)) %>% 
-  ggplot(aes(x = as.factor(block), y = intr, color = as.factor(correct), group = as.factor(correct))) +
-  geom_line()
+# df_intr_TNT_e2 %>% 
+#   dplyr::filter(TNTcond == 'nt') %>% 
+#   dplyr::group_by(block, correct) %>% 
+#   dplyr::summarise(intr = mean(int_rate)) %>% 
+#   ggplot(aes(x = as.factor(block), y = intr, color = as.factor(correct), group = as.factor(correct))) +
+#   geom_line()
 
 # recognition -------------------------------------------------------------
 
@@ -234,28 +248,16 @@ smry_pca_e2 <- summary(res_pca_e2)
 df_indiv_ques_all_e2 <- df_indiv_ques_e2 %>%
   dplyr::mutate(pc1 = res_pca_e2$x[,1], pc2 = res_pca_e2$x[,2])
 
-df_indiv_lm_e2 <- df_indiv_ques_all_e2 %>% 
-  tidyr::pivot_longer(cols = val:aro, names_to = 'vars', values_to = "value") %>% 
-  dplyr::group_by(vars) %>%
-  tidyr::nest() %>% 
-  dplyr::mutate(step1 = purrr::map(.x = data, 
-                                   .f = ~ lm(formula = value ~ pc1 + pc2, data = .x)),
-                step2 = purrr::map(.x = data, 
-                                   .f = ~ lm(formula = value ~ pc1 + pc2 + pc1:pc2,
-                                             data = .x)),
-                model_comparison = purrr::pmap(.l = list(step1, step2),
-                                               .f = anova)
-                )
+# valence
+lmfit_val_e2 <- lm(val ~ pc1 + pc2, data = df_indiv_ques_all_e2)
+smry_lmfit_val_e2 <- summary(lmfit_val_e2)
+r2_lmfit_val_e2 <- get_reg_stats(lmfit_val_e2)
 
-# results of moderation in valence
-r2_val_step1_e2 <- get_reg_stats(df_indiv_lm_e2$step1[[1]])
-r2_val_step2_e2 <- get_reg_stats(df_indiv_lm_e2$step2[[1]])
-model_comp_val_e2 <- get_aov_stats(df_indiv_lm_e2$model_comparison[[1]], 2)
+# arousal
+lmfit_aro_e2 <- lm(aro ~ pc1 + pc2, data = df_indiv_ques_all_e2)
+smry_lmfit_aro_e2 <- summary(lmfit_aro_e2)
+r2_lmfit_aro_e2 <- get_reg_stats(lmfit_aro_e2)
 
-# results of moderation in arousal
-r2_aro_step1_e2 <- get_reg_stats(df_indiv_lm_e2$step1[[2]])
-r2_aro_step2_e2 <- get_reg_stats(df_indiv_lm_e2$step2[[2]])
-model_comp_aro_e2 <- get_aov_stats(df_indiv_lm_e2$model_comparison[[2]], 2)
 
 # tables ------------------------------------------------------------------
 
@@ -299,36 +301,10 @@ df_rating_tntb_e2 %>%
   knitr::kable(format = "pandoc")
 
 # regression
-l_smry_lm_step1_e2 <- lm_to_table(df_indiv_lm_e2$step1)
-l_smry_lm_step2_e2 <- lm_to_table(df_indiv_lm_e2$step2)
-
-purrr::map2(l_smry_lm_step1_e2, l_smry_lm_step2_e2, .f = right_join, by = c("term")) %>% 
-  purrr::map2(.y = c("val", "aro"), .f = ~mutate(.x, measure = .y)) %>%
-  dplyr::bind_rows() %>%
+dplyr::bind_rows(
+  list(val = lm_to_table(lmfit_val_e2), aro = lm_to_table(lmfit_aro_e2)), 
+  .id = "measure") %>% 
   knitr::kable(format = "pandoc")
-
-# model comparison
-l_model_stats_step1_e2 <- purrr::map(df_indiv_lm_e2$step1, .f = summary) %>%
-  purrr::map(.f = ~ tibble(step = 1, r_adj = .x$adj.r.squared, p = 1 - pf(.x$fstatistic["value"], .x$fstatistic["numdf"], .x$fstatistic["dendf"])))
-
-l_model_stats_step2_e2 <- purrr::map(df_indiv_lm_e2$step2, .f = summary) %>%
-  purrr::map(.f = ~ tibble(step = 2, r_adj = .x$adj.r.squared, p = 1 - pf(.x$fstatistic["value"], .x$fstatistic["numdf"], .x$fstatistic["dendf"])))
-
-purrr::pmap(list(l_model_stats_step1_e2, l_model_stats_step2_e2), .f = bind_rows) %>%
-  purrr::map(.f = mutate, diff = r_adj - lag(r_adj)) %>%
-  purrr::map2(.y = df_indiv_lm_e2$model_comparison,
-              .f = ~mutate(.x, p_diff = .y$`Pr(>F)`)
-  ) %>%
-  purrr::map(tidyr::pivot_longer, cols = -step) %>%
-  purrr::map(mutate,
-             type = if_else(str_detect(name, "p"), "p", "r"),
-             type2 = if_else(str_detect(name, "diff"), "diff", "adj")) %>%
-  purrr::map(select, step, type, type2, value) %>%
-  purrr::map(tidyr::pivot_wider, names_from = c(type, step), values_from = value) %>%
-  purrr::map(mutate_at, .vars = c("p_1", "p_2"), .funs = format_pval_2) %>%
-  dplyr::bind_rows(.id = "measure") %>% 
-  dplyr::mutate(measure = dplyr::recode(measure, "1" = "val", "2" = "aro")) %>%
-  knitr::kable(format = "pandoc", digits = 2)
 
 # for analyses on JASP
 df_jasp_e2 <- l_df_rating_subj_mean_e2 %>% 
@@ -366,11 +342,17 @@ gg_corr_cued_recog <- df_ques_e2 %>%
   dplyr::left_join(df_recall_e2_w, by = "subjID") %>%
   dplyr::left_join(df_hit_rate_e2_w %>% dplyr::mutate(`Item Recog` = b - nt, .keep = "unused"),
                    by = "subjID") %>% 
+  dplyr::left_join(df_intr_TNT_e2 %>%
+                     dplyr::filter(TNTcond == 'nt') %>%
+                     dplyr::group_by(subjID) %>%
+                     dplyr::summarise(mean_int = mean(int_rate)),
+                   by = "subjID") %>%
   dplyr::mutate(`Cued Recog` = b - nt) %>%
   dplyr::select(BDI = bdi, 
                 RRS = rrs, 
                 `STAI-S` = stais, 
                 `STAI-T` = stait, 
+                `Intrusion` = mean_int,
                 `Item Recog`, 
                 `Cued Recog`) %>% 
   GGally::ggpairs(lower = list(continuous = wrap("smooth", alpha = 0.3)),
@@ -380,5 +362,5 @@ gg_corr_cued_recog <- df_ques_e2 %>%
         panel.grid = element_blank(),
         strip.background = element_blank())
 
-ggsave(filename = here::here("analyses/figures/pairs_plot_e2_supple.png"), plot = gg_corr_cued_recog, width = 8, height = 8)
+# ggsave(filename = here::here("analyses/figures/pairs_plot_e2_supple.png"), plot = gg_corr_cued_recog, width = 8, height = 8)
 

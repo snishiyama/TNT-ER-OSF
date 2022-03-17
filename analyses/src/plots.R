@@ -116,7 +116,7 @@ upper_grid <- cowplot::plot_grid(gg_intr_TNT_e1, gg_hit_rate_e1, gg_val_diff_e1,
                                  labels = c("A", "B", "C", "D"))
 plot_all_e1 <- cowplot::plot_grid(upper_grid, ggmatrix_gtable(gg_pairplot_e1), ncol = 1, labels = c("", "E"))
 
-ggsave(here::here("analyses/figures/grid_plot_e1.png"), plot_all_e1, width = 10.6, height = 11.4)
+# ggsave(here::here("analyses/figures/grid_plot_e1.png"), plot_all_e1, width = 10.6, height = 11.4)
 
 # gg_simple_slope_e1 <- 
 #   sjPlot::get_model_data(
@@ -132,7 +132,7 @@ ggsave(here::here("analyses/figures/grid_plot_e1.png"), plot_all_e1, width = 10.
 #   theme_classic()
 
 gg_res_pca_e1 <- make_pca_biplot(res_pca_e1)
-ggsave(filename = here::here("analyses/figures/biplot_pca_e1.png"), plot = gg_res_pca_e1, width = 6, height = 4)
+# ggsave(filename = here::here("analyses/figures/biplot_pca_e1.png"), plot = gg_res_pca_e1, width = 6, height = 4)
 
 # Experiment 2 ------------------------------------------------------------
 
@@ -155,15 +155,15 @@ plot_all_e2 <- cowplot::plot_grid(upper_grid_e2, ggmatrix_gtable(gg_pairplot_e2)
 ggsave( here::here("analyses/figures/grid_plot_e2.png"), plot_all_e2, width = 10.6, height = 11.4)
 
 gg_res_pca_e2 <- make_pca_biplot(res_pca_e2)
-ggsave(filename = here::here("analyses/figures/biplot_pca_e2.png"), plot = gg_res_pca_e2, width = 6, height = 4)
+# ggsave(filename = here::here("analyses/figures/biplot_pca_e2.png"), plot = gg_res_pca_e2, width = 6, height = 4)
 
 # Integrated Analyses -----------------------------------------------------
 
 gg_res_pca_both <- make_pca_biplot(res_pca_ques)
-ggsave(filename = here::here("analyses/figures/biplot_pca_both.png"), plot = gg_res_pca_both, width = 6, height = 4)
+# ggsave(filename = here::here("analyses/figures/biplot_pca_both.png"), plot = gg_res_pca_both, width = 6, height = 4)
 
 
 # intrusion ratings for R/NR No-Think items -------------------------------
 
 gg_intr_rnr <- make_plot_intr_supp(df_intr_woex_e1, df_intr_woex_e2)
-ggsave(here::here("analyses/figures/plot_intrusion_supp.png"), plot = gg_intr_rnr, width = 6, height = 4)
+# ggsave(here::here("analyses/figures/plot_intrusion_supp.png"), plot = gg_intr_rnr, width = 6, height = 4)

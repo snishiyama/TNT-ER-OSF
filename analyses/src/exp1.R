@@ -312,7 +312,7 @@ upper_grid <- cowplot::plot_grid(gg_intr_TNT_e1, gg_hit_rate_e1, gg_val_diff_e1,
 
 plot_all_e1 <- cowplot::plot_grid(upper_grid, ggmatrix_gtable(gg_pairplot_e1), ncol = 1, labels = c("", "E"))
 
-# ggsave(here::here("analyses/figures/grid_plot_e1.png"), plot_all_e1, width = 10.6, height = 11.4)
+# ggsave(here::here("analyses/figures/grid_plot_e1.svg"), plot_all_e1, width = 10.6, height = 11.4)
 
 # gg_simple_slope_e1 <- 
 #   sjPlot::get_model_data(

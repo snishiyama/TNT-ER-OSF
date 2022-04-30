@@ -97,7 +97,7 @@ df_intr_e2_w <- df_intr_TNT_e2 %>%
   dplyr::filter(block %in% c(1, 10), TNTcond == 'nt') %>%
   tidyr::pivot_wider(names_from = block, values_from = int_rate, names_prefix = 'block')
 
-ttest_intr_TNT_e2 <- t.test(df_intr_e2_w$block1, df_intr_e2_w$block10, alternative = 'greater')
+ttest_intr_TNT_e2 <- t.test(df_intr_e2_w$block1, df_intr_e2_w$block10, paired = T, alternative = 'greater')
 
 smry_intr_e2 <- get_t_g_ci(df_intr_e2_w$block1, df_intr_e2_w$block10, method = 'greater')
 
@@ -333,7 +333,7 @@ upper_grid_e2 <- cowplot::plot_grid(gg_intr_TNT_e2, gg_hit_rate_e2, gg_val_diff_
                                     labels = c("A", "B", "C", "D"))
 plot_all_e2 <- cowplot::plot_grid(upper_grid_e2, ggmatrix_gtable(gg_pairplot_e2), ncol = 1, labels = c("", "E"))
 
-# ggsave( here::here("analyses/figures/grid_plot_e2.png"), plot_all_e2, width = 10.6, height = 11.4)
+# ggsave( here::here("analyses/figures/grid_plot_e2.svg"), plot_all_e2, width = 10.6, height = 11.4)
 
 gg_res_pca_e2 <- make_pca_biplot(res_pca_e2)
 # ggsave(filename = here::here("analyses/figures/biplot_pca_e2.png"), plot = gg_res_pca_e2, width = 6, height = 4)

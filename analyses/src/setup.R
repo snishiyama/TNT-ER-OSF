@@ -17,6 +17,7 @@ library(car)
 library(GGally)
 library(cowplot)
 library(rstatix)
+library(svglite)
 knitr::opts_chunk$set(echo = F)
 options(readr.num_columns = 0) # readrのnotificationをoffにする
 
@@ -187,8 +188,9 @@ get_cff_stats <- function(lm_obj, v_name){
   p_val <- res$coefficients[v_name, "Pr(>|t|)"]
   se <- res$coefficients[v_name, "Std. Error"]
   b_std <- lm.Beta(lm_obj)[v_name]
-  ci_l <- beta - 1.96 * se
-  ci_u <- beta + 1.96 * se
+  ci <- confint(lm_obj, level = 0.95)
+  ci_l <- ci[v_name, "2.5 %"]
+  ci_u <- ci[v_name, "97.5 %"]
   
   sprintf("_B_ = %.2f, 95%% CI [%.2f, %.2f], $\\beta$ = %.2f, %s",
           beta, ci_l, ci_u, b_std, format_pval(p_val))
